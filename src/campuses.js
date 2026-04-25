@@ -1,5 +1,5 @@
 export const CAMPUS_MAP = {
-  AMW:  "Chicago",
+  AMW:  "AIM Chicago",
   AMA:  "AIM Atlanta",
   AMC:  "AIM Charlotte",
   AMD:  "AIM Dallas",
@@ -17,8 +17,10 @@ export const CAMPUS_MAP = {
   CCHE: "Centura Chesapeake",
   CNOR: "Centura Norfolk",
   CPEN: "Centura Newport News",
-  TTLC: "Tidewater Tech - Little Creek",
-  TTT:  "Tidewater Tech Trades",
+  TTLC:      "Tidewater Tech - Little Creek",
+  TTTLC:     "Tidewater Tech - Little Creek",
+  TTT:       "Tidewater Tech Trades",
+  "HOME OFC": "Home Office",
 };
 
 export function resolveCampus(raw) {
