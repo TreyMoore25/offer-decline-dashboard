@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import Papa from "papaparse";
 import { resolveCampus } from "./campuses";
+import { parseSalary } from "./salaryParser";
 
 const EXPECTED_FIELDS = [
   { key: "name",          label: "Candidate Name",   required: true,  numeric: false },
@@ -36,33 +37,6 @@ const COMMON_MAPPINGS = {
   "notes": "notes", "feedback": "notes", "comments": "notes", "note": "notes",
 };
 
-function parseSalary(raw) {
-  if (!raw) return 0;
-  const str = raw.toString().trim();
-
-  // K-notation: $105K, 80K, 105K (min), etc.
-  const kMatch = str.match(/(\d+\.?\d*)\s*[Kk]/);
-  if (kMatch) return Math.round(parseFloat(kMatch[1]) * 1000);
-
-  // Strip currency symbols and commas
-  const cleaned = str.replace(/[$,]/g, "");
-
-  // Range: "32-38", "32 - 38", "$32-$38", "68,000-70,000"
-  const rangeMatch = cleaned.match(/(\d+\.?\d*)\s*[-–]\s*(\d+\.?\d*)/);
-  if (rangeMatch) {
-    const low  = parseFloat(rangeMatch[1]);
-    const high = parseFloat(rangeMatch[2]);
-    const avg  = (low + high) / 2;
-    return avg < 1000 ? Math.round(avg * 2080) : Math.round(avg);
-  }
-
-  // First numeric value
-  const numMatch = cleaned.match(/(\d+\.?\d*)/);
-  if (!numMatch) return 0;
-  const val = parseFloat(numMatch[1]);
-  // Hourly if under $500
-  return val < 500 ? Math.round(val * 2080) : Math.round(val);
-}
 
 function autoMap(headers) {
   const mapping = {};

@@ -25,7 +25,7 @@ function buildCampusColors(campuses) {
   return colors;
 }
 
-export default function Dashboard({ data, onReset }) {
+export default function Dashboard({ data }) {
   const campuses = useMemo(() => [...new Set(data.map((d) => d.campus))].sort(), [data]);
   const roles    = useMemo(() => [...new Set(data.map((d) => d.role))].sort(), [data]);
   const reasons  = useMemo(() => [...new Set(data.map((d) => d.declineReason))].sort(), [data]);
@@ -118,17 +118,9 @@ export default function Dashboard({ data, onReset }) {
           <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: 32, fontWeight: 800, margin: 0, lineHeight: 1 }}>Offer Decline Tracker</h1>
           <div style={{ fontSize: 12, color: "#666", marginTop: 6 }}>Salary gap analysis · Campus comparison · Decline reasons</div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
-          <div style={{ fontSize: 11, color: "#555", textAlign: "right" }}>
-            <div>Last updated</div>
-            <div style={{ color: "#e8a838" }}>{today}</div>
-          </div>
-          <button
-            onClick={onReset}
-            style={{ fontSize: 10, letterSpacing: 1, padding: "5px 12px", background: "transparent", border: "1px solid #2a2d36", color: "#555", borderRadius: 3, cursor: "pointer", textTransform: "uppercase" }}
-          >
-            ↑ Load new file
-          </button>
+        <div style={{ fontSize: 11, color: "#555", textAlign: "right" }}>
+          <div>Last updated</div>
+          <div style={{ color: "#e8a838" }}>{today}</div>
         </div>
       </div>
 
