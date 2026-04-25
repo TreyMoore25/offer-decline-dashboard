@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import Papa from "papaparse";
+import { resolveCampus } from "./campuses";
 
 const EXPECTED_FIELDS = [
   { key: "name",          label: "Candidate Name",   required: true,  numeric: false },
@@ -166,7 +167,9 @@ export default function CsvUpload({ onData, onUseSample }) {
         if (!field) return;
         const fieldDef = EXPECTED_FIELDS.find((f) => f.key === field);
         const raw = row[h]?.toString().trim() ?? "";
-        record[field] = fieldDef?.numeric ? parseSalary(raw) : raw;
+        let val = fieldDef?.numeric ? parseSalary(raw) : raw;
+        if (field === "campus") val = resolveCampus(val);
+        record[field] = val;
       });
       if (!record.date)         record.date = "";
       if (!record.declineReason) record.declineReason = "Not Specified";
