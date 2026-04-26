@@ -417,6 +417,11 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
         <div style={{ maxWidth: 1600, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
             <img
+              src="/cotulla-logo.png"
+              alt="Cotulla Education logo"
+              style={{ height: 40, objectFit: "contain" }}
+            />
+            <img
               src={isDark ? "/quad_white.png" : "/quad_black.png"}
               alt="Quad logo"
               style={{ height: 40, objectFit: "contain" }}
