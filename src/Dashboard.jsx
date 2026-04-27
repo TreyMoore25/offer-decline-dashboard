@@ -29,8 +29,9 @@ const REASON_COLORS = Object.fromEntries([
 const PAGE_SIZE     = 25;
 const GAP_PAGE_SIZE = 8;
 
-const fmt = (n) => "$" + Number(n).toLocaleString();
-const gap = (d) => d.expectedSalary - d.offeredSalary;
+const fmt  = (n) => "$" + Number(n).toLocaleString();
+const hrly = (n) => n ? `~$${(n / 2080).toFixed(2)}/hr` : null;
+const gap  = (d) => d.expectedSalary - d.offeredSalary;
 const pct = (d) => d.offeredSalary
   ? (((d.expectedSalary - d.offeredSalary) / d.offeredSalary) * 100).toFixed(1)
   : "0.0";
@@ -261,8 +262,9 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
     }),
   [enrichedData, campusFilter, roleFilter, platformFilter, reasonFilter, sortKey, sortDir]);
 
-  const avgGap  = filtered.length ? Math.round(filtered.reduce((s, d) => s + gap(d), 0) / filtered.length) : 0;
-  const compPct = filtered.length ? Math.round((filtered.filter((d) => d.effectiveReason?.includes("Compensation")).length / filtered.length) * 100) : 0;
+  const salaryRecords = filtered.filter((d) => d.offeredSalary > 0 && d.expectedSalary > 0);
+  const avgGap  = salaryRecords.length ? Math.round(salaryRecords.reduce((s, d) => s + gap(d), 0) / salaryRecords.length) : 0;
+  const compPct = filtered.length ? Math.round((filtered.filter((d) => d.effectiveReason === "Compensation / Pay").length / filtered.length) * 100) : 0;
 
   const campusChart = useMemo(() => {
     const byC = {};
@@ -378,9 +380,15 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
         <div style={{ fontWeight: 700, color: "#f1f5f9", marginBottom: 10, borderBottom: "1px solid #334155", paddingBottom: 8 }}>{label}</div>
         <div style={{ display: "grid", gridTemplateColumns: "auto auto", gap: "4px 16px" }}>
           <span style={{ color: "#64748b" }}>Avg Offered</span>
-          <span style={{ fontWeight: 600, color: "#60a5fa", textAlign: "right" }}>{fmt(offered)}</span>
+          <span style={{ textAlign: "right" }}>
+            <span style={{ fontWeight: 600, color: "#60a5fa" }}>{fmt(offered)}</span>
+            <span style={{ display: "block", fontSize: 10, color: "#475569" }}>{hrly(offered)}</span>
+          </span>
           <span style={{ color: "#64748b" }}>Avg Expected</span>
-          <span style={{ fontWeight: 600, color: "#f1f5f9", textAlign: "right" }}>{fmt(expected)}</span>
+          <span style={{ textAlign: "right" }}>
+            <span style={{ fontWeight: 600, color: "#f1f5f9" }}>{fmt(expected)}</span>
+            <span style={{ display: "block", fontSize: 10, color: "#475569" }}>{hrly(expected)}</span>
+          </span>
           <span style={{ color: "#64748b" }}>Gap</span>
           <span style={{ fontWeight: 700, color: gapAmt > 0 ? "#fb7185" : "#4ade80", textAlign: "right" }}>
             {gapAmt >= 0 ? "+" : ""}{fmt(gapAmt)} <span style={{ fontWeight: 400, fontSize: 11 }}>({gapPct}%)</span>
@@ -427,9 +435,6 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
               style={{ height: 40, objectFit: "contain" }}
             />
             <div>
-              <div style={{ fontSize: 12, fontWeight: 500, color: T.textFaint, marginBottom: 3 }}>
-                HR Analytics
-              </div>
               <h1 style={{ fontSize: 20, fontWeight: 800, margin: 0, color: T.text, letterSpacing: "-0.02em" }}>
                 Offer Decline Dashboard
               </h1>
@@ -579,8 +584,26 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={ttStyle}
-                    formatter={(v, name) => [`${v} (${Math.round((v / filtered.length) * 100)}%)`, name]}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const { name, value } = payload[0];
+                      const pct = Math.round((value / filtered.length) * 100);
+                      const color = REASON_COLORS[name] || "#94a3b8";
+                      return (
+                        <div style={{ ...ttStyle, minWidth: 180 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                            <div style={{ width: 10, height: 10, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                            <span style={{ fontWeight: 700, color: "#f1f5f9", fontSize: 13 }}>{name}</span>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "auto auto", gap: "3px 16px" }}>
+                            <span style={{ color: "#64748b" }}>Count</span>
+                            <span style={{ fontWeight: 600, color: color, textAlign: "right" }}>{value}</span>
+                            <span style={{ color: "#64748b" }}>Share</span>
+                            <span style={{ fontWeight: 600, color: "#f1f5f9", textAlign: "right" }}>{pct}%</span>
+                          </div>
+                        </div>
+                      );
+                    }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -790,8 +813,12 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
                         <span style={{ color: campusColor, background: campusColor + "18", padding: "3px 9px", borderRadius: 4, fontSize: 11, fontWeight: 500 }}>{d.campus}</span>
                       </td>
                       <td style={{ padding: "12px 16px", color: T.textFaint }}>{d.platform}</td>
-                      <td style={{ padding: "12px 16px", color: T.accent, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{d.offeredSalary ? fmt(d.offeredSalary) : "—"}</td>
-                      <td style={{ padding: "12px 16px", color: T.text, fontVariantNumeric: "tabular-nums" }}>{d.expectedSalary ? fmt(d.expectedSalary) : "—"}</td>
+                      <td style={{ padding: "12px 16px", fontVariantNumeric: "tabular-nums" }}>
+                        {d.offeredSalary ? <><span style={{ color: T.accent, fontWeight: 600 }}>{fmt(d.offeredSalary)}</span><br /><span style={{ fontSize: 11, color: T.textFaintest }}>{hrly(d.offeredSalary)}</span></> : "—"}
+                      </td>
+                      <td style={{ padding: "12px 16px", fontVariantNumeric: "tabular-nums" }}>
+                        {d.expectedSalary ? <><span style={{ color: T.text, fontWeight: 500 }}>{fmt(d.expectedSalary)}</span><br /><span style={{ fontSize: 11, color: T.textFaintest }}>{hrly(d.expectedSalary)}</span></> : "—"}
+                      </td>
                       <td style={{ padding: "12px 16px", fontVariantNumeric: "tabular-nums" }}>
                         {d.offeredSalary && d.expectedSalary ? (
                           <span style={{ color: g > 0 ? T.accentRed : T.accentGreen, fontWeight: 600 }}>
