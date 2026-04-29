@@ -80,7 +80,7 @@ function FilterSelect({ label, value, onChange, options, theme: T }) {
   );
 }
 
-function MultiSelect({ label, values, onChange, options, theme: T }) {
+function MultiSelect({ label, values, onChange, options, theme: T, labelFor }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -90,8 +90,9 @@ function MultiSelect({ label, values, onChange, options, theme: T }) {
     return () => document.removeEventListener("mousedown", onMouseDown);
   }, []);
 
+  const getLabel = labelFor || ((v) => v);
   const isActive = values.length > 0;
-  const displayText = values.length === 0 ? "All" : values.length === 1 ? values[0] : `${values.length} selected`;
+  const displayText = values.length === 0 ? "All" : values.length === 1 ? getLabel(values[0]) : `${values.length} selected`;
 
   function toggle(opt) {
     onChange(values.includes(opt) ? values.filter((v) => v !== opt) : [...values, opt]);
@@ -145,7 +146,7 @@ function MultiSelect({ label, values, onChange, options, theme: T }) {
                 onChange={() => toggle(opt)}
                 style={{ accentColor: T.accent, width: 14, height: 14, cursor: "pointer", flexShrink: 0 }}
               />
-              <span style={{ fontSize: 13, color: T.text, fontFamily: FONT }}>{opt}</span>
+              <span style={{ fontSize: 13, color: T.text, fontFamily: FONT }}>{getLabel(opt)}</span>
             </label>
           ))}
         </div>
@@ -265,6 +266,14 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
   const salaryRecords = filtered.filter((d) => d.offeredSalary > 0 && d.expectedSalary > 0);
   const avgGap  = salaryRecords.length ? Math.round(salaryRecords.reduce((s, d) => s + gap(d), 0) / salaryRecords.length) : 0;
   const compPct = filtered.length ? Math.round((filtered.filter((d) => d.effectiveReason === "Compensation / Pay").length / filtered.length) * 100) : 0;
+
+  const overallSalaryRecs  = enrichedData.filter((d) => d.offeredSalary > 0 && d.expectedSalary > 0);
+  const overallAvgOffered  = overallSalaryRecs.length ? Math.round(overallSalaryRecs.reduce((s, d) => s + d.offeredSalary,  0) / overallSalaryRecs.length) : 0;
+  const overallAvgExpected = overallSalaryRecs.length ? Math.round(overallSalaryRecs.reduce((s, d) => s + d.expectedSalary, 0) / overallSalaryRecs.length) : 0;
+  const campusSpotlightSalary = campusFilter.length === 1 ? salaryRecords : [];
+  const campusAvgOffered   = campusSpotlightSalary.length ? Math.round(campusSpotlightSalary.reduce((s, d) => s + d.offeredSalary,  0) / campusSpotlightSalary.length) : 0;
+  const campusAvgExpected  = campusSpotlightSalary.length ? Math.round(campusSpotlightSalary.reduce((s, d) => s + d.expectedSalary, 0) / campusSpotlightSalary.length) : 0;
+  const SPOTLIGHT_MIN = 3;
 
   const campusChart = useMemo(() => {
     const byC = {};
@@ -436,7 +445,7 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
             />
             <div>
               <h1 style={{ fontSize: 20, fontWeight: 800, margin: 0, color: T.text, letterSpacing: "-0.02em" }}>
-                Offer Decline Dashboard
+                Sourced Candidates Not Interested Dashboard
               </h1>
             </div>
           </div>
@@ -460,7 +469,7 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
         {/* ── Filters ──────────────────────────────────────────────────── */}
         <div style={{ display: "flex", gap: 16, marginBottom: 28, flexWrap: "wrap", alignItems: "flex-end", padding: "20px 24px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, boxShadow: T.cardShadow }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: T.textFaintest, marginRight: 8, alignSelf: "flex-end", paddingBottom: 7 }}>Filter by</div>
-          <MultiSelect label="Campus"   values={stageCampus}   onChange={setStageCampus}   options={campuses}  theme={T} />
+          <MultiSelect label="Campus"   values={stageCampus}   onChange={setStageCampus}   options={campuses}  theme={T} labelFor={(v) => CAMPUS_BY_NAME[v] || v} />
           <MultiSelect label="Role"     values={stageRole}     onChange={setStageRole}     options={roles}     theme={T} />
           <MultiSelect label="Sourcing" values={stagePlatform} onChange={setStagePlatform} options={platforms} theme={T} />
           <FilterSelect key={T.colorScheme} label="Decline Reason" value={stageReason} onChange={setStageReason} options={["All", ...reasons]} theme={T} />
@@ -483,12 +492,11 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
         </div>
 
         {/* ── KPI Cards ────────────────────────────────────────────────── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 24 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
           {[
-            { label: "Total Declinations",   value: filtered.length,                                    sub: "in current view",     accent: T.accent      },
-            { label: "Avg. Salary Gap",       value: fmt(avgGap),                                        sub: "offered vs. expected",accent: T.accentRed   },
-            { label: "Compensation-Driven",   value: `${compPct}%`,                                      sub: "of all declines",     accent: T.accentBlue  },
-            { label: "Campuses Affected",     value: [...new Set(filtered.map((d) => d.campus))].length, sub: "unique locations",    accent: T.accentGreen },
+            { label: "Total Declinations", value: filtered.length,  sub: "in current view",      accent: T.accent     },
+            { label: "Avg. Salary Gap",    value: fmt(avgGap),       sub: "offered vs. expected", accent: T.accentRed  },
+            { label: "Compensation-Driven",value: `${compPct}%`,    sub: "of all declines",       accent: T.accentBlue },
           ].map((k) => (
             <Card key={k.label} theme={T} style={{ padding: "22px 24px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
@@ -502,7 +510,128 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
               </div>
             </Card>
           ))}
+
+          {/* Decline Reasons donut — compact KPI card */}
+          <Card theme={T} style={{ padding: "18px 20px" }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: T.textFaint, marginBottom: 6 }}>Decline Reasons</div>
+            <div style={{ position: "relative" }}>
+              <ResponsiveContainer width="100%" height={130}>
+                <PieChart>
+                  <Pie data={reasonCounts} dataKey="value" cx="50%" cy="50%" innerRadius={34} outerRadius={54} paddingAngle={3} strokeWidth={0}>
+                    {reasonCounts.map((r) => (
+                      <Cell key={r.name} fill={REASON_COLORS[r.name] || T.textMuted} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const { name, value } = payload[0];
+                      const share = Math.round((value / filtered.length) * 100);
+                      const color = REASON_COLORS[name] || "#94a3b8";
+                      return (
+                        <div style={{ ...ttStyle, minWidth: 160 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                            <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                            <span style={{ fontWeight: 700, color: "#f1f5f9", fontSize: 12 }}>{name}</span>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "auto auto", gap: "2px 12px" }}>
+                            <span style={{ color: "#64748b", fontSize: 11 }}>Count</span>
+                            <span style={{ fontWeight: 600, color, textAlign: "right", fontSize: 11 }}>{value}</span>
+                            <span style={{ color: "#64748b", fontSize: 11 }}>Share</span>
+                            <span style={{ fontWeight: 600, color: "#f1f5f9", textAlign: "right", fontSize: 11 }}>{share}%</span>
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: T.text, lineHeight: 1, letterSpacing: "-0.02em" }}>{filtered.length}</div>
+                <div style={{ fontSize: 9, fontWeight: 600, color: T.textFaintest, letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 2 }}>Total</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+              {reasonCounts.slice(0, 3).map((r) => (
+                <div key={r.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: REASON_COLORS[r.name] || T.textMuted, flexShrink: 0 }} />
+                    <span style={{ fontSize: 10, color: T.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{r.name}</span>
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: T.text, flexShrink: 0 }}>{r.value}</span>
+                </div>
+              ))}
+              {reasonCounts.length > 3 && (
+                <div style={{ fontSize: 10, color: T.textFaintest, textAlign: "right" }}>+{reasonCounts.length - 3} more</div>
+              )}
+            </div>
+          </Card>
         </div>
+
+        {/* ── Campus Spotlight ─────────────────────────────────────────── */}
+        {campusFilter.length === 1 && (() => {
+          const code     = CAMPUS_BY_NAME[campusFilter[0]] || campusFilter[0];
+          const name     = campusFilter[0];
+          const hasData  = campusSpotlightSalary.length >= SPOTLIGHT_MIN;
+          const campusGap = campusAvgOffered && campusAvgExpected ? campusAvgExpected - campusAvgOffered : null;
+          const overallGap = overallAvgOffered && overallAvgExpected ? overallAvgExpected - overallAvgOffered : null;
+          return (
+            <Card theme={T} style={{ padding: 24, marginBottom: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+                <div>
+                  <SectionLabel theme={T}>Campus Spotlight</SectionLabel>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: T.text, fontFamily: FONT }}>
+                    {code} · {name}
+                    <span style={{ fontSize: 12, fontWeight: 400, color: T.textFaintest, marginLeft: 12 }}>{filtered.length} record{filtered.length !== 1 ? "s" : ""}</span>
+                  </div>
+                </div>
+              </div>
+              {!hasData ? (
+                <div style={{ fontSize: 14, color: T.textFaintest, fontStyle: "italic", textAlign: "center", padding: "24px 0" }}>
+                  More data coming soon
+                </div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+                  {[
+                    { label: "Avg Offered Salary",  campusVal: campusAvgOffered,  overallVal: overallAvgOffered,  accent: T.accent,      higherIsBetter: true  },
+                    { label: "Avg Expected Salary",  campusVal: campusAvgExpected, overallVal: overallAvgExpected, accent: T.accentRed,   higherIsBetter: false },
+                    { label: "Avg Salary Gap",       campusVal: campusGap,         overallVal: overallGap,         accent: "#f59e0b",     higherIsBetter: false },
+                  ].map(({ label, campusVal, overallVal, accent, higherIsBetter }) => {
+                    const delta = campusVal != null && overallVal != null ? campusVal - overallVal : null;
+                    const deltaPositive = delta != null && delta > 0;
+                    const deltaColor = delta == null ? T.textFaintest
+                      : higherIsBetter ? (deltaPositive ? T.accentGreen : T.accentRed)
+                      : (deltaPositive ? T.accentRed : T.accentGreen);
+                    return (
+                      <div key={label} style={{ background: T.cardAlt, border: `1px solid ${T.border}`, borderRadius: 8, padding: "14px 16px" }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: T.textFaint, marginBottom: 10 }}>{label}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 8 }}>
+                          <div>
+                            <div style={{ fontSize: 10, color: T.textFaintest, marginBottom: 3 }}>This Campus</div>
+                            <div style={{ fontSize: 22, fontWeight: 800, color: accent, letterSpacing: "-0.02em", lineHeight: 1 }}>
+                              {campusVal != null ? fmt(campusVal) : "—"}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ fontSize: 10, color: T.textFaintest, marginBottom: 3 }}>Overall Avg</div>
+                            <div style={{ fontSize: 16, fontWeight: 600, color: T.textMuted }}>
+                              {overallVal != null ? fmt(overallVal) : "—"}
+                            </div>
+                          </div>
+                        </div>
+                        {delta != null && (
+                          <div style={{ fontSize: 12, color: deltaColor, fontWeight: 600 }}>
+                            {delta >= 0 ? "+" : ""}{fmt(delta)} vs. overall
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+          );
+        })()}
 
         {/* ── Charts row 1 ─────────────────────────────────────────────── */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
@@ -570,62 +699,8 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
         </div>
 
         {/* ── Charts row 2 ─────────────────────────────────────────────── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 20, marginBottom: 20 }}>
-          {/* Donut */}
-          <Card theme={T} style={{ padding: 24 }}>
-            <SectionLabel theme={T}>Breakdown</SectionLabel>
-            <CardTitle theme={T}>Decline Reasons</CardTitle>
-            <div style={{ position: "relative" }}>
-              <ResponsiveContainer width="100%" height={190}>
-                <PieChart>
-                  <Pie data={reasonCounts} dataKey="value" cx="50%" cy="50%" innerRadius={56} outerRadius={86} paddingAngle={3} strokeWidth={0}>
-                    {reasonCounts.map((r) => (
-                      <Cell key={r.name} fill={REASON_COLORS[r.name] || T.textMuted} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null;
-                      const { name, value } = payload[0];
-                      const pct = Math.round((value / filtered.length) * 100);
-                      const color = REASON_COLORS[name] || "#94a3b8";
-                      return (
-                        <div style={{ ...ttStyle, minWidth: 180 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                            <div style={{ width: 10, height: 10, borderRadius: "50%", background: color, flexShrink: 0 }} />
-                            <span style={{ fontWeight: 700, color: "#f1f5f9", fontSize: 13 }}>{name}</span>
-                          </div>
-                          <div style={{ display: "grid", gridTemplateColumns: "auto auto", gap: "3px 16px" }}>
-                            <span style={{ color: "#64748b" }}>Count</span>
-                            <span style={{ fontWeight: 600, color: color, textAlign: "right" }}>{value}</span>
-                            <span style={{ color: "#64748b" }}>Share</span>
-                            <span style={{ fontWeight: 600, color: "#f1f5f9", textAlign: "right" }}>{pct}%</span>
-                          </div>
-                        </div>
-                      );
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-                <div style={{ fontSize: 28, fontWeight: 800, color: T.text, lineHeight: 1, letterSpacing: "-0.02em" }}>{filtered.length}</div>
-                <div style={{ fontSize: 10, fontWeight: 600, color: T.textFaintest, letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 4 }}>Total</div>
-              </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-              {reasonCounts.map((r) => (
-                <div key={r.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ width: 9, height: 9, borderRadius: "50%", background: REASON_COLORS[r.name] || T.textMuted, flexShrink: 0 }} />
-                    <span style={{ fontSize: 12, color: T.textMuted }}>{r.name}</span>
-                  </div>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: T.text }}>{r.value} <span style={{ fontWeight: 400, color: T.textFaintest }}>({Math.round((r.value / filtered.length) * 100)}%)</span></span>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* Gap by Campus */}
+        <div style={{ marginBottom: 20 }}>
+          {/* Gap by Campus — full width */}
           <Card theme={T} style={{ padding: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
               <div>
