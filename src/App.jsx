@@ -57,6 +57,19 @@ function parseRows(rows, headers) {
     const parts = [record.feedback, record.notes].filter(Boolean);
     record.notes = parts.join(" | ").trim();
     delete record.feedback;
+    // Parse date → year-month string for time series grouping
+    if (record.date) {
+      const d = new Date(record.date);
+      record.yearMonth = !isNaN(d)
+        ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+        : null;
+    } else {
+      record.yearMonth = null;
+    }
+    // Swap offered/expected if entered backwards (data entry error)
+    if (record.offeredSalary > 0 && record.expectedSalary > 0 && record.offeredSalary > record.expectedSalary) {
+      [record.offeredSalary, record.expectedSalary] = [record.expectedSalary, record.offeredSalary];
+    }
     // Fallbacks
     if (!record.declineReason?.trim()) record.declineReason = "Not Specified";
     if (!record.date)  record.date  = "";

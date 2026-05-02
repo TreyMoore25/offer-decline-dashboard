@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer,
+  ResponsiveContainer, Brush,
   PieChart, Pie, Cell,
 } from "recharts";
 import PlatformBreakdown from "./PlatformBreakdown";
@@ -29,6 +29,13 @@ const REASON_COLORS = Object.fromEntries([
 const PAGE_SIZE     = 25;
 const GAP_PAGE_SIZE = 8;
 
+const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const fmtMonth = (ym) => {
+  if (!ym) return "";
+  const [y, m] = ym.split("-");
+  return `${MONTH_LABELS[parseInt(m, 10) - 1]} '${y.slice(2)}`;
+};
+
 const fmt  = (n) => "$" + Number(n).toLocaleString();
 const hrly = (n) => n ? `~$${(n / 2080).toFixed(2)}/hr` : null;
 const gap  = (d) => d.expectedSalary - d.offeredSalary;
@@ -36,13 +43,44 @@ const pct = (d) => d.offeredSalary
   ? (((d.expectedSalary - d.offeredSalary) / d.offeredSalary) * 100).toFixed(1)
   : "0.0";
 
+function MonthPicker({ label, value, onChange, theme: T, min, max }) {
+  const isActive = !!value;
+  return (
+    <div>
+      <div style={{ fontSize: 11, fontWeight: 600, color: T.textFaint, marginBottom: 6, fontFamily: FONT }}>{label}</div>
+      <input
+        type="month"
+        value={value || ""}
+        min={min}
+        max={max}
+        onChange={(e) => onChange(e.target.value || "All")}
+        style={{
+          padding: "7px 12px",
+          fontSize: 13,
+          fontFamily: FONT,
+          background: T.inputBg,
+          color: isActive ? T.accent : T.textMuted,
+          border: `1px solid ${isActive ? T.accent : T.border}`,
+          borderRadius: 6,
+          cursor: "pointer",
+          outline: "none",
+          colorScheme: T.colorScheme,
+          boxShadow: T.cardShadow,
+          minWidth: 148,
+        }}
+      />
+    </div>
+  );
+}
+
 function buildCampusColors(campuses) {
   const m = {};
   campuses.forEach((c, i) => { m[c] = PALETTE[i % PALETTE.length]; });
   return m;
 }
 
-function FilterSelect({ label, value, onChange, options, theme: T }) {
+function FilterSelect({ label, value, onChange, options, theme: T, labelFor, minWidth = 180 }) {
+  const getLabel = labelFor || ((v) => v);
   const isActive = value !== "All";
   return (
     <div>
@@ -68,12 +106,12 @@ function FilterSelect({ label, value, onChange, options, theme: T }) {
           backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='${encodeURIComponent(T.textFaint)}'/%3E%3C/svg%3E")`,
           backgroundRepeat: "no-repeat",
           backgroundPosition: "right 11px center",
-          minWidth: 180,
+          minWidth,
           boxShadow: T.cardShadow,
         }}
       >
         {options.map((o) => (
-          <option key={o} value={o} style={{ background: T.inputBg, color: T.text }}>{o}</option>
+          <option key={o} value={o} style={{ background: T.inputBg, color: T.text }}>{getLabel(o)}</option>
         ))}
       </select>
     </div>
@@ -211,6 +249,12 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
   const [roleFilter,      setRoleFilter]      = useState([]);
   const [platformFilter,  setPlatformFilter]  = useState([]);
   const [reasonFilter,    setReasonFilter]    = useState("All");
+  const [dateFilter,      setDateFilter]      = useState({ start: null, end: null });
+  const [brushKey,        setBrushKey]        = useState(0);
+
+  // Staged date range
+  const [stageDateFrom,   setStageDateFrom]   = useState("All");
+  const [stageDateTo,     setStageDateTo]     = useState("All");
 
   // Staged filters — bound to the UI controls until Apply is clicked
   const [stageCampus,    setStageCampus]    = useState([]);
@@ -220,13 +264,18 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
 
   const arrEq = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
   const hasPending = !arrEq(stageCampus, campusFilter) || !arrEq(stageRole, roleFilter) ||
-                     !arrEq(stagePlatform, platformFilter) || stageReason !== reasonFilter;
+                     !arrEq(stagePlatform, platformFilter) || stageReason !== reasonFilter ||
+                     stageDateFrom !== (dateFilter.start || "All") || stageDateTo !== (dateFilter.end || "All");
 
   function applyFilters() {
     setCampusFilter(stageCampus);
     setRoleFilter(stageRole);
     setPlatformFilter(stagePlatform);
     setReasonFilter(stageReason);
+    const newStart = stageDateFrom === "All" ? null : stageDateFrom;
+    const newEnd   = stageDateTo   === "All" ? null : stageDateTo;
+    setDateFilter({ start: newStart, end: newEnd });
+    setBrushKey((k) => k + 1);
   }
 
   function clearFilters() {
@@ -234,6 +283,9 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
     setStageRole([]);   setRoleFilter([]);
     setStagePlatform([]); setPlatformFilter([]);
     setStageReason("All"); setReasonFilter("All");
+    setStageDateFrom("All"); setStageDateTo("All");
+    setDateFilter({ start: null, end: null });
+    setBrushKey((k) => k + 1);
   }
   const [sortKey,         setSortKey]         = useState("date");
   const [sortDir,         setSortDir]         = useState("desc");
@@ -252,6 +304,11 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
       if (roleFilter.length     > 0 && !roleFilter.includes(d.role))           return false;
       if (platformFilter.length > 0 && !platformFilter.includes(d.platform))   return false;
       if (reasonFilter !== "All" && d.effectiveReason !== reasonFilter)         return false;
+      if (dateFilter.start || dateFilter.end) {
+        if (!d.yearMonth) return false;
+        if (dateFilter.start && d.yearMonth < dateFilter.start) return false;
+        if (dateFilter.end   && d.yearMonth > dateFilter.end)   return false;
+      }
       return true;
     })
     .sort((a, b) => {
@@ -261,7 +318,7 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
       if (av > bv) return sortDir === "asc" ? 1 : -1;
       return 0;
     }),
-  [enrichedData, campusFilter, roleFilter, platformFilter, reasonFilter, sortKey, sortDir]);
+  [enrichedData, campusFilter, roleFilter, platformFilter, reasonFilter, dateFilter, sortKey, sortDir]);
 
   const salaryRecords = filtered.filter((d) => d.offeredSalary > 0 && d.expectedSalary > 0);
   const avgGap  = salaryRecords.length ? Math.round(salaryRecords.reduce((s, d) => s + gap(d), 0) / salaryRecords.length) : 0;
@@ -278,6 +335,7 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
   const campusChart = useMemo(() => {
     const byC = {};
     filtered.forEach((d) => {
+      if (!d.offeredSalary || !d.expectedSalary) return;
       if (!byC[d.campus]) byC[d.campus] = { campus: d.campus, offered: [], expected: [] };
       byC[d.campus].offered.push(d.offeredSalary);
       byC[d.campus].expected.push(d.expectedSalary);
@@ -292,6 +350,7 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
   const roleChart = useMemo(() => {
     const byR = {};
     filtered.forEach((d) => {
+      if (!d.offeredSalary || !d.expectedSalary) return;
       if (!byR[d.role]) byR[d.role] = { role: d.role, offered: [], expected: [] };
       byR[d.role].offered.push(d.offeredSalary);
       byR[d.role].expected.push(d.expectedSalary);
@@ -308,6 +367,20 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
     filtered.forEach((d) => { counts[d.effectiveReason] = (counts[d.effectiveReason] || 0) + 1; });
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }, [filtered]);
+
+  const allMonths = useMemo(() => {
+    const months = new Set();
+    enrichedData.forEach((d) => { if (d.yearMonth) months.add(d.yearMonth); });
+    return [...months].sort();
+  }, [enrichedData]);
+
+  const monthlyData = useMemo(() =>
+    allMonths.map((ym) => ({
+      month: ym,
+      label: fmtMonth(ym),
+      Declines: enrichedData.filter((d) => d.yearMonth === ym).length,
+    })),
+  [allMonths, enrichedData]);
 
   const gapChart = useMemo(() => {
     const byC = {};
@@ -327,7 +400,7 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
 
   useEffect(() => {
     setPage(0); setGapPage(0); setCampusChartPage(0); setRoleChartPage(0);
-  }, [campusFilter, roleFilter, platformFilter, reasonFilter, sortKey, sortDir]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [campusFilter, roleFilter, platformFilter, reasonFilter, dateFilter, sortKey, sortDir]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pageCount    = Math.ceil(filtered.length / PAGE_SIZE);
   const pageSlice    = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -473,6 +546,23 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
           <MultiSelect label="Role"     values={stageRole}     onChange={setStageRole}     options={roles}     theme={T} />
           <MultiSelect label="Sourcing" values={stagePlatform} onChange={setStagePlatform} options={platforms} theme={T} />
           <FilterSelect key={T.colorScheme} label="Decline Reason" value={stageReason} onChange={setStageReason} options={["All", ...reasons]} theme={T} />
+          <div style={{ width: 1, background: T.border, alignSelf: "stretch", margin: "0 4px" }} />
+          <MonthPicker
+            label="From"
+            value={stageDateFrom === "All" ? "" : stageDateFrom}
+            onChange={setStageDateFrom}
+            theme={T}
+            min={allMonths[0]}
+            max={allMonths[allMonths.length - 1]}
+          />
+          <MonthPicker
+            label="To"
+            value={stageDateTo === "All" ? "" : stageDateTo}
+            onChange={setStageDateTo}
+            theme={T}
+            min={allMonths[0]}
+            max={allMonths[allMonths.length - 1]}
+          />
           <div style={{ alignSelf: "flex-end", display: "flex", gap: 8 }}>
             <button
               onClick={applyFilters}
@@ -480,7 +570,9 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
             >
               Apply
             </button>
-            {(campusFilter.length > 0 || roleFilter.length > 0 || platformFilter.length > 0 || reasonFilter !== "All" || stageCampus.length > 0 || stageRole.length > 0 || stagePlatform.length > 0 || stageReason !== "All") && (
+            {(campusFilter.length > 0 || roleFilter.length > 0 || platformFilter.length > 0 || reasonFilter !== "All" ||
+              stageCampus.length > 0 || stageRole.length > 0 || stagePlatform.length > 0 || stageReason !== "All" ||
+              dateFilter.start || dateFilter.end || stageDateFrom !== "All" || stageDateTo !== "All") && (
               <button
                 onClick={clearFilters}
                 style={{ padding: "7px 14px", background: "transparent", border: `1px solid ${T.accentRed}`, color: T.accentRed, borderRadius: 6, cursor: "pointer", fontSize: 12, fontFamily: FONT, fontWeight: 500 }}
@@ -697,6 +789,84 @@ export default function Dashboard({ data, theme: T, isDark, onToggleTheme }) {
             )}
           </Card>
         </div>
+
+        {/* ── Time Series ──────────────────────────────────────────────── */}
+        {monthlyData.length > 0 && (
+          <Card theme={T} style={{ padding: "20px 24px", marginBottom: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+              <div>
+                <SectionLabel theme={T}>Decline Trend</SectionLabel>
+                <div style={{ fontSize: 15, fontWeight: 700, color: T.text, fontFamily: FONT }}>
+                  Declinations Over Time
+                  {(dateFilter.start || dateFilter.end) && (
+                    <span style={{ fontSize: 12, fontWeight: 400, color: T.accent, marginLeft: 12 }}>
+                      {fmtMonth(dateFilter.start)} – {fmtMonth(dateFilter.end)}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {(dateFilter.start || dateFilter.end) && (
+                <button
+                  onClick={() => { setDateFilter({ start: null, end: null }); setBrushKey((k) => k + 1); }}
+                  style={{ fontSize: 11, fontWeight: 500, fontFamily: FONT, padding: "4px 10px", background: "transparent", border: `1px solid ${T.accentRed}`, color: T.accentRed, borderRadius: 5, cursor: "pointer", whiteSpace: "nowrap" }}
+                >
+                  Reset range
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: 12, color: T.textFaintest, marginBottom: 8 }}>
+              Drag the handles below to select a time window — all tiles and charts update to match
+            </div>
+            <ResponsiveContainer width="100%" height={160}>
+              <BarChart key={brushKey} data={monthlyData} barCategoryGap="20%">
+                <CartesianGrid strokeDasharray="3 3" stroke={T.chartGrid} vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fill: T.textFaintest, fontSize: 11, fontFamily: FONT }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fill: T.textFaintest, fontSize: 11, fontFamily: FONT }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={24}
+                />
+                <Tooltip
+                  cursor={{ fill: T.border, opacity: 0.4 }}
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const { label, Declines } = payload[0].payload;
+                    return (
+                      <div style={{ ...ttStyle }}>
+                        <div style={{ fontWeight: 700, color: "#f1f5f9", marginBottom: 4 }}>{label}</div>
+                        <div style={{ color: "#64748b" }}>{Declines} declination{Declines !== 1 ? "s" : ""}</div>
+                      </div>
+                    );
+                  }}
+                />
+                <Bar dataKey="Declines" fill={T.accent} radius={[3, 3, 0, 0]} />
+                <Brush
+                  dataKey="label"
+                  height={24}
+                  stroke={T.accent}
+                  fill={T.cardAlt}
+                  travellerWidth={8}
+                  onChange={({ startIndex, endIndex }) => {
+                    const start = allMonths[startIndex];
+                    const end   = allMonths[endIndex];
+                    const isAll = startIndex === 0 && endIndex === allMonths.length - 1;
+                    setDateFilter(isAll ? { start: null, end: null } : { start, end });
+                    setStageDateFrom(isAll ? "All" : start);
+                    setStageDateTo(isAll ? "All" : end);
+                  }}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        )}
 
         {/* ── Charts row 2 ─────────────────────────────────────────────── */}
         <div style={{ marginBottom: 20 }}>
